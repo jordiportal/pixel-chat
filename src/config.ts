@@ -6,8 +6,11 @@ export interface BrainConfig {
 
 const STORAGE_KEY = 'pixel-chat-config';
 
+// Permitir override via variable global para Docker
+const RUNTIME_API_URL = (typeof window !== 'undefined' && (window as any).__BRAIN_API_URL__) || '';
+
 const DEFAULTS: BrainConfig = {
-  apiUrl: 'http://localhost:8000',
+  apiUrl: RUNTIME_API_URL || 'http://localhost:8000',
   apiKey: '',
   model: 'brain-adaptive',
 };

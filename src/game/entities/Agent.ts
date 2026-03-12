@@ -152,4 +152,10 @@ export class Agent {
   private playIdle(dir = 'down'): void {
     this.sprite.play(`${this.def.id}-idle-${dir}`, true);
   }
+
+  destroy(): void {
+    this.clearBubble();
+    this.nameTag.destroy();
+    this.sprite.destroy();
+  }
 }

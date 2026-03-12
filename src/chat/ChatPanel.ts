@@ -1,5 +1,6 @@
 import { eventBus } from '../events/EventBus';
-import { getConfig, saveConfig, type BrainConfig } from '../config';
+import { getConfig, saveConfig } from '../config';
+import { agentConfigService } from '../services/AgentConfigService';
 import { marked } from 'marked';
 
 marked.setOptions({ breaks: true, gfm: true });
@@ -9,6 +10,7 @@ export class ChatPanel {
   private messagesEl!: HTMLElement;
   private inputEl!: HTMLTextAreaElement;
   private sendBtn!: HTMLButtonElement;
+  private pendingBadge!: HTMLElement;
   private currentMsgEl: HTMLElement | null = null;
   private currentBuffer = '';
   private streaming = false;
@@ -24,7 +26,13 @@ export class ChatPanel {
     this.container.innerHTML = `
       <div class="chat-header">
         <h2>Pixel Chat</h2>
-        <button class="settings-btn" title="Configuración">⚙</button>
+        <div class="header-actions">
+          <button class="config-btn" title="Configurar agentes">
+            <span class="config-icon">👥</span>
+            <span class="pending-badge hidden">0</span>
+          </button>
+          <button class="settings-btn" title="Configuración">⚙</button>
+        </div>
       </div>
       <div class="chat-messages"></div>
       <div class="chat-input">
@@ -35,6 +43,7 @@ export class ChatPanel {
     this.messagesEl = this.container.querySelector('.chat-messages')!;
     this.inputEl = this.container.querySelector('textarea')!;
     this.sendBtn = this.container.querySelector('.send-btn')!;
+    this.pendingBadge = this.container.querySelector('.pending-badge')!;
   }
 
   private bind(): void {
@@ -47,6 +56,8 @@ export class ChatPanel {
     });
     this.container.querySelector('.settings-btn')!
       .addEventListener('click', () => this.showSettings());
+    this.container.querySelector('.config-btn')!
+      .addEventListener('click', () => eventBus.emit('open:agent-config'));
   }
 
   private listen(): void {
@@ -75,6 +86,18 @@ export class ChatPanel {
 
     eventBus.on('chat:error', (msg: string) => {
       this.addMessage('system', msg);
+    });
+
+    eventBus.on('agents:loaded', (payload: { agents: Array<{id: string; name: string}>; source: string }) => {
+      this.addMessage('system', `Agentes actualizados (${payload.source}): ${payload.agents.length} agentes`);
+    });
+
+    eventBus.on('agents:pending', (payload: { count: number }) => {
+      this.pendingBadge.textContent = String(payload.count);
+      this.pendingBadge.classList.toggle('hidden', payload.count === 0);
+      if (payload.count > 0) {
+        this.addMessage('system', `Hay ${payload.count} agentes A2A pendientes de configurar. Haz clic en 👥 para configurarlos.`);
+      }
     });
   }
 

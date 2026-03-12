@@ -10,7 +10,8 @@
   },
   "dependencies": {
     "marked": "^17.0.4",
-    "phaser": "^3.90.0"
+    "phaser": "^3.90.0",
+    "sql.js": "^1.14.1"
   },
   "devDependencies": {
     "typescript": "^5.9.3",

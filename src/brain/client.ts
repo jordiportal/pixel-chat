@@ -33,8 +33,9 @@ export class BrainClient {
     let fullResponse = '';
 
     try {
-      // Always use relative URL — Vite proxy handles /v1/* → Brain API
-      const url = '/v1/chat/completions';
+      // Usar URL absoluta si está configurada, o relativa para compatibilidad
+      const baseUrl = config.apiUrl || '';
+      const url = baseUrl ? `${baseUrl}/v1/chat/completions` : '/v1/chat/completions';
 
       console.log('[BrainClient] POST', url, { model: config.model, messages: this.messages.length });
 

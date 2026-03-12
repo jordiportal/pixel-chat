@@ -127,35 +127,4 @@ export interface AgentDef {
   brainNames: string[];
 }
 
-export const AGENT_DEFS: AgentDef[] = [
-  {
-    id: 'brain', name: 'Brain',
-    bodyColor: '#4a7aff', hairColor: '#2a3a5a',
-    homeX: 8, homeY: 3, zone: 'mainOffice',
-    brainNames: ['adaptive', 'brain'],
-  },
-  {
-    id: 'librarian', name: 'Librarian',
-    bodyColor: '#3ab54a', hairColor: '#2a4a2a',
-    homeX: 25, homeY: 6, zone: 'library',
-    brainNames: ['rag', 'librarian', 'biblioteca'],
-  },
-  {
-    id: 'hacker', name: 'Hacker',
-    bodyColor: '#dd4444', hairColor: '#1a1a2e',
-    homeX: 6, homeY: 13, zone: 'serverRoom',
-    brainNames: ['code', 'shell', 'hacker', 'developer'],
-  },
-  {
-    id: 'explorer', name: 'Explorer',
-    bodyColor: '#dd8833', hairColor: '#5a3a1a',
-    homeX: 23, homeY: 14, zone: 'webCorner',
-    brainNames: ['researcher', 'web', 'explorer', 'search'],
-  },
-  {
-    id: 'designer', name: 'Designer',
-    bodyColor: '#9955dd', hairColor: '#4a2a5a',
-    homeX: 12, homeY: 5, zone: 'mainOffice',
-    brainNames: ['designer', 'slides', 'image', 'creative', 'blender'],
-  },
-];
+export { agentRegistry } from './AgentRegistry';

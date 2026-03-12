@@ -6,12 +6,15 @@ export default defineConfig({
     target: 'esnext',
     outDir: 'dist',
   },
+  optimizeDeps: {
+    exclude: ['sql.js'],
+  },
   server: {
     port: 5173,
     open: true,
     proxy: {
       '/v1': {
-        target: 'http://localhost:8000',
+        target: process.env.BRAIN_API_URL || 'http://localhost:8000',
         changeOrigin: true,
       },
     },

@@ -76,6 +76,12 @@ body {
   color: #e94560;
 }
 
+.header-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.config-btn,
 .settings-btn {
   background: none;
   border: 1px solid rgba(255,255,255,.2);
@@ -84,10 +90,32 @@ body {
   cursor: pointer;
   font-size: 14px;
   border-radius: 3px;
+  position: relative;
 }
 
+.config-btn:hover,
 .settings-btn:hover {
   background: rgba(255,255,255,.08);
+}
+
+.pending-badge {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  background: #e94560;
+  color: white;
+  font-size: 9px;
+  min-width: 16px;
+  height: 16px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+}
+
+.pending-badge.hidden {
+  display: none;
 }
 
 .chat-messages {
@@ -342,4 +370,305 @@ body {
   max-width: 140px;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.agent-status-empty .agent-action {
+  color: #ff6b6b;
+  font-style: italic;
+}
+
+/* ---- Agent Config Panel ---- */
+
+.agent-config-overlay {
+  z-index: 1100;
+}
+
+.acp-panel {
+  width: 600px;
+  max-width: 95vw;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.acp-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #0f3460;
+  margin-bottom: 12px;
+}
+
+.acp-header h3 {
+  color: #e94560;
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin: 0;
+}
+
+.acp-close {
+  background: none;
+  border: none;
+  color: #8a9ab5;
+  font-size: 22px;
+  cursor: pointer;
+  padding: 0 4px;
+}
+
+.acp-close:hover {
+  color: #e94560;
+}
+
+.acp-body {
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+}
+
+.acp-section {
+  margin-bottom: 20px;
+}
+
+.acp-section h4 {
+  color: #8a9ab5;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 10px;
+}
+
+.acp-empty {
+  color: #555;
+  font-style: italic;
+  font-size: 12px;
+}
+
+/* Skill rows (unconfigured) */
+
+.acp-skill-row {
+  background: #1a1a2e;
+  border: 1px solid #0f3460;
+  border-radius: 4px;
+  padding: 12px;
+  margin-bottom: 10px;
+}
+
+.acp-skill-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+
+.acp-skill-name {
+  font-weight: bold;
+  color: #e0e0e0;
+  font-size: 13px;
+}
+
+.acp-skill-id {
+  color: #555;
+  font-size: 11px;
+}
+
+.acp-skill-tags {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.acp-tag {
+  background: #0f3460;
+  color: #8a9ab5;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 10px;
+}
+
+.acp-skill-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.acp-field label {
+  display: block;
+  color: #8a9ab5;
+  font-size: 10px;
+  text-transform: uppercase;
+  margin-bottom: 3px;
+}
+
+.acp-field input[type="text"],
+.acp-field input[type="number"],
+.acp-field select {
+  width: 100%;
+  padding: 5px 8px;
+  background: #0f0f23;
+  border: 1px solid #0f3460;
+  color: #e0e0e0;
+  font-family: 'Courier New', monospace;
+  font-size: 12px;
+  border-radius: 3px;
+  outline: none;
+}
+
+.acp-field input:focus,
+.acp-field select:focus {
+  border-color: #e94560;
+}
+
+.acp-field-inline {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.acp-field-inline > div {
+  flex: 1;
+  min-width: 70px;
+}
+
+.acp-field input[type="color"] {
+  width: 100%;
+  height: 28px;
+  border: 1px solid #0f3460;
+  background: #0f0f23;
+  cursor: pointer;
+  border-radius: 3px;
+  padding: 2px;
+}
+
+.acp-skill-preview {
+  display: flex;
+  justify-content: center;
+  padding: 6px 0;
+}
+
+.acp-preview-avatar {
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  position: relative;
+  border: 1px solid rgba(255,255,255,.15);
+}
+
+.acp-preview-hair {
+  position: absolute;
+  top: -2px;
+  left: 2px;
+  right: 2px;
+  height: 8px;
+  border-radius: 3px 3px 0 0;
+}
+
+.acp-skill-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.acp-btn {
+  padding: 5px 14px;
+  border: 1px solid #0f3460;
+  background: #1a1a2e;
+  color: #e0e0e0;
+  font-family: 'Courier New', monospace;
+  font-size: 11px;
+  cursor: pointer;
+  border-radius: 3px;
+}
+
+.acp-btn:hover {
+  background: #0f3460;
+}
+
+.acp-btn-primary {
+  background: #e94560;
+  border-color: #e94560;
+  color: white;
+}
+
+.acp-btn-primary:hover {
+  background: #ff6b8a;
+}
+
+.acp-btn-danger {
+  border-color: #aa3333;
+  color: #ff6b6b;
+}
+
+.acp-btn-danger:hover {
+  background: #aa3333;
+  color: white;
+}
+
+/* Configured agent rows */
+
+.acp-agent-row {
+  background: #1a1a2e;
+  border: 1px solid #0f3460;
+  border-radius: 4px;
+  margin-bottom: 6px;
+  overflow: hidden;
+}
+
+.acp-agent-summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+}
+
+.acp-agent-preview {
+  width: 20px;
+  height: 20px;
+  border-radius: 3px;
+  position: relative;
+  flex-shrink: 0;
+}
+
+.acp-agent-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.acp-agent-info strong {
+  font-size: 12px;
+  color: #e0e0e0;
+}
+
+.acp-agent-meta {
+  font-size: 10px;
+  color: #555;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.acp-btn-edit {
+  font-size: 14px;
+  padding: 2px 8px;
+}
+
+.acp-agent-edit {
+  padding: 0 12px 12px;
+  border-top: 1px solid #0f3460;
+}
+
+.acp-agent-edit.hidden {
+  display: none;
+}
+
+.acp-btn-configure-all,
+.acp-btn-delete-all {
+  margin-bottom: 10px;
+  display: block;
 }

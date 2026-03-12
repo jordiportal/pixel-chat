@@ -1,0 +1,29 @@
+version: '3.8'
+
+services:
+  pixel-chat:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: pixel-chat
+    ports:
+      - "8081:80"
+    environment:
+      - NODE_ENV=production
+      # Configura aquí la URL del Brain API
+      # Deja vacío para usar la URL configurada en el navegador (localStorage)
+      # O establece una URL fija: - BRAIN_API_URL=http://host.docker.internal:8000
+      - BRAIN_API_URL=${BRAIN_API_URL:-}
+    networks:
+      - pixel-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+networks:
+  pixel-network:
+    driver: bridge
