@@ -4,11 +4,11 @@
  * Bridges A2A discovery with SQLite persistence.
  */
 
-import { db, type AgentRow } from '../db/Database';
+import { db, type AgentRow, type ToolMappingRow } from '../db/Database';
 import { a2aClient, type A2ASkill } from '../a2a/client';
 import { generateColors, findFreePosition, generateBrainNames, generateDisplayName } from '../utils/AgentGenerator';
 import { eventBus } from '../events/EventBus';
-import type { AgentDef } from '../game/map/OfficeMap';
+import { ACTION_TYPE_TO_ZONE, parseMapData, WALKABLE, TILE, ZONES, type ZoneDef, type AgentDef } from '../game/map/OfficeMap';
 
 export interface UnconfiguredSkill {
   skill: A2ASkill;
@@ -202,6 +202,198 @@ class AgentConfigService {
       .replace(/[^a-z0-9_-]/g, '_')
       .replace(/_+/g, '_')
       .replace(/^_|_$/g, '') || 'agent';
+  }
+
+  // ── Tool Mappings ─────────────────────────────────────────────
+
+  private static readonly CORE_TOOLS: Array<{ name: string; label: string }> = [
+    { name: 'web_search', label: 'Web Search' },
+    { name: 'web_fetch', label: 'Web Fetch' },
+    { name: 'python', label: 'Python' },
+    { name: 'shell', label: 'Shell' },
+    { name: 'javascript', label: 'JavaScript' },
+    { name: 'code_exec', label: 'Code Exec' },
+    { name: 'file_read', label: 'File Read' },
+    { name: 'file_write', label: 'File Write' },
+    { name: 'image', label: 'Image' },
+    { name: 'slides', label: 'Slides' },
+    { name: 'delegate', label: 'Delegate' },
+    { name: 'data', label: 'Data' },
+    { name: 'summarizing', label: 'Summarizing' },
+    { name: 'planning', label: 'Planning' },
+    { name: 'rag', label: 'RAG' },
+    { name: 'blender', label: 'Blender 3D' },
+    { name: 'email', label: 'Email' },
+    { name: 'calendar', label: 'Calendar' },
+    { name: 'sap', label: 'SAP' },
+    { name: 'm365', label: 'Microsoft 365' },
+  ];
+
+  /** Tools for a specific agent: A2A skill tags + core tools */
+  getToolsForAgent(agentId: string): Array<{ name: string; label: string; source: 'agent' | 'core' }> {
+    const result: Array<{ name: string; label: string; source: 'agent' | 'core' }> = [];
+    const seen = new Set<string>();
+
+    // Agent-specific tools from A2A skill tags and brainNames
+    const agentRow = db.getAgent(agentId);
+    if (agentRow) {
+      const skill = this.getSkills().find(s => s.id === agentRow.skill_id);
+      if (skill) {
+        for (const tag of skill.tags) {
+          const t = tag.toLowerCase().replace(/[_\s-]+/g, '_');
+          if (t && !seen.has(t) && t !== 'agent' && t !== 'chain') {
+            seen.add(t);
+            result.push({ name: t, label: tag, source: 'agent' });
+          }
+        }
+      }
+      const brainNames: string[] = JSON.parse(agentRow.brain_names || '[]');
+      for (const bn of brainNames) {
+        const t = bn.toLowerCase();
+        if (t && !seen.has(t)) {
+          seen.add(t);
+          result.push({ name: t, label: bn, source: 'agent' });
+        }
+      }
+    }
+
+    for (const tool of AgentConfigService.CORE_TOOLS) {
+      if (!seen.has(tool.name)) {
+        seen.add(tool.name);
+        result.push({ ...tool, source: 'core' });
+      }
+    }
+
+    return result;
+  }
+
+  /** All known tools (agent-agnostic, for backward compat) */
+  getKnownTools(): Array<{ name: string; label: string }> {
+    return [...AgentConfigService.CORE_TOOLS];
+  }
+
+  /** Scan the map and return all interactable element instances with position + zone */
+  getMapElements(): Array<{ type: string; label: string; x: number; y: number; zone: string; zoneLabel: string }> {
+    const TILE_TYPE_INFO: Record<string, string> = {
+      MONITOR: 'Monitor', SERVER: 'Servidor', BOOKSHELF: 'Estantería',
+      WHITEBOARD: 'Pizarra', COFFEE: 'Cafetera', DESK: 'Escritorio', TABLE: 'Mesa',
+    };
+    const interactable: Set<number> = new Set([
+      TILE.DESK, TILE.MONITOR, TILE.BOOKSHELF, TILE.SERVER,
+      TILE.WHITEBOARD, TILE.COFFEE, TILE.TABLE,
+    ]);
+    const indexToType: Record<number, string> = {
+      [TILE.DESK]: 'DESK', [TILE.MONITOR]: 'MONITOR', [TILE.BOOKSHELF]: 'BOOKSHELF',
+      [TILE.SERVER]: 'SERVER', [TILE.WHITEBOARD]: 'WHITEBOARD',
+      [TILE.COFFEE]: 'COFFEE', [TILE.TABLE]: 'TABLE',
+    };
+
+    const mapData = parseMapData();
+    const elements: Array<{ type: string; label: string; x: number; y: number; zone: string; zoneLabel: string }> = [];
+
+    for (let y = 0; y < mapData.length; y++) {
+      for (let x = 0; x < mapData[y].length; x++) {
+        const tile = mapData[y][x];
+        if (!interactable.has(tile)) continue;
+
+        const type = indexToType[tile];
+        if (!type) continue;
+
+        const zone = this.getZoneAt(x, y);
+        elements.push({
+          type,
+          label: TILE_TYPE_INFO[type] ?? type,
+          x, y,
+          zone: zone?.name ?? '?',
+          zoneLabel: zone?.label ?? 'Exterior',
+        });
+      }
+    }
+
+    return elements;
+  }
+
+  private getZoneAt(x: number, y: number): ZoneDef | null {
+    for (const z of Object.values(ZONES)) {
+      const b = z.bounds;
+      if (x >= b.x && x < b.x + b.w && y >= b.y && y < b.y + b.h) return z;
+    }
+    return null;
+  }
+
+  getToolMappings(agentId: string): ToolMappingRow[] {
+    return db.getToolMappingsForAgent(agentId);
+  }
+
+  async saveToolMapping(
+    agentId: string, toolName: string, label: string,
+    tileType?: string | null, targetX?: number | null, targetY?: number | null,
+  ): Promise<void> {
+    await db.upsertToolMapping({
+      agent_id: agentId,
+      tool_name: toolName,
+      label,
+      tile_type: tileType ?? null,
+      target_x: targetX ?? null,
+      target_y: targetY ?? null,
+    });
+  }
+
+  async deleteToolMapping(agentId: string, toolName: string): Promise<void> {
+    await db.deleteToolMapping(agentId, toolName);
+  }
+
+  /**
+   * Resolve where an agent should walk for a given action_type.
+   * Returns walkable {x, y} near the mapped element, or null for zone-POI fallback.
+   */
+  resolveToolTarget(agentId: string, actionType: string): { x: number; y: number } | null {
+    const mappings = db.getToolMappingsForAgent(agentId);
+    const mapping = mappings.find(m => m.tool_name === actionType);
+
+    if (!mapping || mapping.target_x == null || mapping.target_y == null) {
+      return null;
+    }
+
+    return this.findAdjacentWalkable(mapping.target_x, mapping.target_y);
+  }
+
+  /** Find the nearest walkable tile adjacent to (tx, ty) */
+  private findAdjacentWalkable(tx: number, ty: number): { x: number; y: number } {
+    const mapData = parseMapData();
+    const offsets = [
+      [0, 1], [0, -1], [1, 0], [-1, 0],
+      [1, 1], [1, -1], [-1, 1], [-1, -1],
+    ];
+
+    // Check the tile itself first
+    if (mapData[ty]?.[tx] !== undefined && WALKABLE.has(mapData[ty][tx])) {
+      return { x: tx, y: ty };
+    }
+
+    // Check adjacent tiles
+    for (const [dx, dy] of offsets) {
+      const nx = tx + dx;
+      const ny = ty + dy;
+      if (mapData[ny]?.[nx] !== undefined && WALKABLE.has(mapData[ny][nx])) {
+        return { x: nx, y: ny };
+      }
+    }
+
+    // Expand search radius
+    for (let r = 2; r <= 3; r++) {
+      for (let dy = -r; dy <= r; dy++) {
+        for (let dx = -r; dx <= r; dx++) {
+          const nx = tx + dx;
+          const ny = ty + dy;
+          if (mapData[ny]?.[nx] !== undefined && WALKABLE.has(mapData[ny][nx])) {
+            return { x: nx, y: ny };
+          }
+        }
+      }
+    }
+
+    return { x: tx, y: ty };
   }
 
   private emitChange(): void {

@@ -25,6 +25,16 @@ export interface AgentRow {
   updated_at: string;
 }
 
+export interface ToolMappingRow {
+  id: number;
+  agent_id: string;
+  tool_name: string;
+  label: string;
+  tile_type: string | null;
+  target_x: number | null;
+  target_y: number | null;
+}
+
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS agents (
   id          TEXT PRIMARY KEY,
@@ -39,6 +49,17 @@ CREATE TABLE IF NOT EXISTS agents (
   avatar_seed TEXT,
   created_at  TEXT DEFAULT (datetime('now')),
   updated_at  TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS tool_mappings (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  agent_id    TEXT NOT NULL,
+  tool_name   TEXT NOT NULL,
+  label       TEXT NOT NULL,
+  tile_type   TEXT,
+  target_x    INTEGER,
+  target_y    INTEGER,
+  UNIQUE(agent_id, tool_name)
 );
 `;
 
@@ -109,7 +130,9 @@ class Database {
       }
 
       this.db = persisted ? new SQL.Database(persisted) : new SQL.Database();
-      this.db.run(SCHEMA);
+      for (const stmt of SCHEMA.split(';').map(s => s.trim()).filter(Boolean)) {
+        this.db.run(stmt);
+      }
       await this.persist();
 
       console.log('[DB] SQLite ready');
@@ -207,6 +230,66 @@ class Database {
     const count = (stmt.getAsObject() as { cnt: number }).cnt;
     stmt.free();
     return count;
+  }
+
+  // ── Tool Mappings CRUD ─────────────────────────────────────
+
+  getToolMappingsForAgent(agentId: string): ToolMappingRow[] {
+    if (!this.db) return [];
+    const stmt = this.db.prepare(
+      'SELECT * FROM tool_mappings WHERE agent_id = ? ORDER BY tool_name',
+    );
+    stmt.bind([agentId]);
+    const rows: ToolMappingRow[] = [];
+    while (stmt.step()) {
+      rows.push(stmt.getAsObject() as unknown as ToolMappingRow);
+    }
+    stmt.free();
+    return rows;
+  }
+
+  getAllToolMappings(): ToolMappingRow[] {
+    if (!this.db) return [];
+    const stmt = this.db.prepare('SELECT * FROM tool_mappings ORDER BY agent_id, tool_name');
+    const rows: ToolMappingRow[] = [];
+    while (stmt.step()) {
+      rows.push(stmt.getAsObject() as unknown as ToolMappingRow);
+    }
+    stmt.free();
+    return rows;
+  }
+
+  async upsertToolMapping(mapping: Omit<ToolMappingRow, 'id'>): Promise<void> {
+    if (!this.db) {
+      console.error('[DB] Cannot upsert tool mapping — database not initialized');
+      return;
+    }
+    this.db.run(
+      `INSERT INTO tool_mappings (agent_id, tool_name, label, tile_type, target_x, target_y)
+       VALUES (?, ?, ?, ?, ?, ?)
+       ON CONFLICT(agent_id, tool_name) DO UPDATE SET
+         label = excluded.label,
+         tile_type = excluded.tile_type,
+         target_x = excluded.target_x,
+         target_y = excluded.target_y`,
+      [
+        mapping.agent_id, mapping.tool_name, mapping.label,
+        mapping.tile_type ?? null, mapping.target_x ?? null, mapping.target_y ?? null,
+      ],
+    );
+    await this.persist();
+  }
+
+  async deleteToolMapping(agentId: string, toolName: string): Promise<void> {
+    if (!this.db) return;
+    this.db.run('DELETE FROM tool_mappings WHERE agent_id = ? AND tool_name = ?', [agentId, toolName]);
+    await this.persist();
+  }
+
+  async deleteToolMappingsForAgent(agentId: string): Promise<void> {
+    if (!this.db) return;
+    this.db.run('DELETE FROM tool_mappings WHERE agent_id = ?', [agentId]);
+    await this.persist();
   }
 
   // ── Export / Import ──────────────────────────────────────────

@@ -4,7 +4,7 @@
 
 import { agentConfigService, type UnconfiguredSkill } from '../services/AgentConfigService';
 import { generateColors, findFreePosition } from '../utils/AgentGenerator';
-import { db, type AgentRow } from '../db/Database';
+import { db, type AgentRow, type ToolMappingRow } from '../db/Database';
 import { ZONES } from '../game/map/OfficeMap';
 
 export class AgentConfigPanel {
@@ -118,6 +118,78 @@ export class AgentConfigPanel {
     `;
   }
 
+  /** Builds <option> list of concrete map element instances (e.g. "Monitor - Oficina Principal (7,1)") */
+  private mapElementOptions(selectedType: string | null, selectedX: number | null, selectedY: number | null): string {
+    const elements = agentConfigService.getMapElements();
+    const selectedKey = (selectedType && selectedX != null && selectedY != null)
+      ? `${selectedType}:${selectedX}:${selectedY}` : '';
+
+    let html = `<option value="">Sin elemento</option>`;
+    let lastZone = '';
+    for (const el of elements) {
+      if (el.zone !== lastZone) {
+        if (lastZone) html += '</optgroup>';
+        html += `<optgroup label="${this.esc(el.zoneLabel)}">`;
+        lastZone = el.zone;
+      }
+      const key = `${el.type}:${el.x}:${el.y}`;
+      html += `<option value="${key}"${key === selectedKey ? ' selected' : ''}>${el.label} (${el.x}, ${el.y})</option>`;
+    }
+    if (lastZone) html += '</optgroup>';
+    return html;
+  }
+
+  /** Builds <option> list of tools available for a specific agent */
+  private toolSelectOptions(agentId: string, existing: Set<string>): string {
+    const tools = agentConfigService.getToolsForAgent(agentId);
+    const agentTools = tools.filter(t => t.source === 'agent' && !existing.has(t.name));
+    const coreTools = tools.filter(t => t.source === 'core' && !existing.has(t.name));
+
+    let html = '';
+    if (agentTools.length > 0) {
+      html += `<optgroup label="Herramientas del agente">`;
+      html += agentTools.map(t => `<option value="${t.name}">${t.label}</option>`).join('');
+      html += `</optgroup>`;
+    }
+    if (coreTools.length > 0) {
+      html += `<optgroup label="Herramientas generales">`;
+      html += coreTools.map(t => `<option value="${t.name}">${t.label}</option>`).join('');
+      html += `</optgroup>`;
+    }
+    return html;
+  }
+
+  private buildToolsSection(agentId: string, mappings: ToolMappingRow[]): string {
+    const existingTools = new Set(mappings.map(m => m.tool_name));
+
+    const mappingRows = mappings.map(m => `
+      <div class="acp-tool-row" data-agent="${this.esc(agentId)}" data-tool="${this.esc(m.tool_name)}">
+        <span class="acp-tool-name">${this.esc(m.label)}</span>
+        <span class="acp-tool-arrow">→</span>
+        <select class="acp-tool-element">${this.mapElementOptions(m.tile_type, m.target_x, m.target_y)}</select>
+        <button class="acp-btn acp-tool-update" data-agent="${this.esc(agentId)}" data-tool="${this.esc(m.tool_name)}" data-label="${this.esc(m.label)}">OK</button>
+        <button class="acp-btn acp-btn-danger acp-tool-delete" data-agent="${this.esc(agentId)}" data-tool="${this.esc(m.tool_name)}">✕</button>
+      </div>
+    `).join('');
+
+    const availableOptions = this.toolSelectOptions(agentId, existingTools);
+
+    return `
+      <div class="acp-tools-section" data-agent="${this.esc(agentId)}">
+        <h5>Herramientas → Elementos</h5>
+        ${mappingRows || '<p class="acp-empty">Sin herramientas mapeadas. Agrega una para que el agente interactúe con elementos del mapa.</p>'}
+        <div class="acp-tool-add">
+          <select class="acp-tool-add-select">
+            <option value="">Agregar herramienta...</option>
+            ${availableOptions}
+          </select>
+          <input type="text" class="acp-tool-add-custom" placeholder="O nombre custom" />
+          <button class="acp-btn acp-btn-primary acp-tool-add-btn" data-agent="${this.esc(agentId)}">+</button>
+        </div>
+      </div>
+    `;
+  }
+
   private buildHTML(unconfigured: UnconfiguredSkill[], configured: AgentRow[]): string {
     const unconfiguredRows = unconfigured.length === 0
       ? '<p class="acp-empty">Todos los agentes A2A ya est&aacute;n configurados.</p>'
@@ -138,7 +210,9 @@ export class AgentConfigPanel {
 
     const configuredRows = configured.length === 0
       ? '<p class="acp-empty">No hay agentes configurados.</p>'
-      : configured.map((a, i) => `
+      : configured.map((a, i) => {
+        const toolMappings = agentConfigService.getToolMappings(a.id);
+        return `
         <div class="acp-agent-row" data-agent-id="${this.esc(a.id)}" data-index="${i}">
           <div class="acp-agent-summary" data-index="${i}">
             <div class="acp-agent-preview" style="background:${a.body_color}">
@@ -146,7 +220,7 @@ export class AgentConfigPanel {
             </div>
             <div class="acp-agent-info">
               <strong>${this.esc(a.name)}</strong>
-              <span class="acp-agent-meta">${this.esc(a.skill_id)} | ${ZONES[a.zone]?.label ?? a.zone} (${a.home_x}, ${a.home_y})</span>
+              <span class="acp-agent-meta">${this.esc(a.skill_id)} | ${ZONES[a.zone]?.label ?? a.zone} (${a.home_x}, ${a.home_y})${toolMappings.length > 0 ? ` | ${toolMappings.length} tools` : ''}</span>
             </div>
             <button class="acp-btn acp-btn-edit" data-index="${i}" title="Editar">✎</button>
             <button class="acp-btn acp-btn-danger acp-btn-delete" data-id="${this.esc(a.id)}" title="Eliminar">✕</button>
@@ -157,9 +231,10 @@ export class AgentConfigPanel {
               bodyColor: a.body_color, hairColor: a.hair_color,
               homeX: a.home_x, homeY: a.home_y,
             })}
+            ${this.buildToolsSection(a.id, toolMappings)}
           </div>
         </div>
-      `).join('');
+      `}).join('');
 
     return `
       <div class="settings-panel acp-panel">
@@ -268,6 +343,67 @@ export class AgentConfigPanel {
     this.overlay.querySelector('.acp-btn-delete-all')?.addEventListener('click', async () => {
       await agentConfigService.deleteAllAgents();
       this.refresh();
+    });
+
+    this.bindToolMappings();
+  }
+
+  private bindToolMappings(): void {
+    if (!this.overlay) return;
+
+    // Add tool
+    this.overlay.querySelectorAll('.acp-tool-add-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const agentId = (btn as HTMLElement).dataset.agent!;
+        const section = btn.closest('.acp-tool-add')!;
+        const select = section.querySelector('.acp-tool-add-select') as HTMLSelectElement;
+        const custom = section.querySelector('.acp-tool-add-custom') as HTMLInputElement;
+
+        const toolName = select.value || custom.value.trim();
+        if (!toolName) return;
+
+        const allTools = agentConfigService.getToolsForAgent(agentId);
+        const known = allTools.find(t => t.name === toolName);
+        const label = known?.label ?? toolName;
+
+        await agentConfigService.saveToolMapping(agentId, toolName, label);
+        this.refresh();
+      });
+    });
+
+    // Update tool mapping — dropdown value is "TYPE:X:Y" or ""
+    this.overlay.querySelectorAll('.acp-tool-update').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const el = btn as HTMLElement;
+        const agentId = el.dataset.agent!;
+        const toolName = el.dataset.tool!;
+        const label = el.dataset.label!;
+        const row = btn.closest('.acp-tool-row')!;
+
+        const rawValue = (row.querySelector('.acp-tool-element') as HTMLSelectElement).value;
+        let tileType: string | null = null;
+        let targetX: number | null = null;
+        let targetY: number | null = null;
+
+        if (rawValue) {
+          const [type, x, y] = rawValue.split(':');
+          tileType = type;
+          targetX = parseInt(x);
+          targetY = parseInt(y);
+        }
+
+        await agentConfigService.saveToolMapping(agentId, toolName, label, tileType, targetX, targetY);
+        this.refresh();
+      });
+    });
+
+    // Delete tool mapping
+    this.overlay.querySelectorAll('.acp-tool-delete').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const el = btn as HTMLElement;
+        await agentConfigService.deleteToolMapping(el.dataset.agent!, el.dataset.tool!);
+        this.refresh();
+      });
     });
   }
 

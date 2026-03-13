@@ -7,6 +7,7 @@ import {
 import { Agent } from '../entities/Agent';
 import { eventBus } from '../../events/EventBus';
 import { agentRegistry } from '../map/AgentRegistry';
+import { agentConfigService } from '../../services/AgentConfigService';
 import { buildAgentTextures } from './PreloadScene';
 import type { BrainThinkingEvent, BrainActionEvent, BrainStatusEvent } from '../../brain/types';
 
@@ -189,14 +190,19 @@ export class OfficeScene extends Phaser.Scene {
     const agent = this.getActiveAgent();
 
     if (ev.status === 'running') {
-      const zoneName = ACTION_TYPE_TO_ZONE[ev.action_type] ?? 'mainOffice';
-      const zone = ZONES[zoneName];
-      if (zone) {
-        agent.showSpeech(ev.title || ev.action_type);
-        this.emitAgentStatus(agent, ev.title || ev.action_type);
-        await agent.walkTo(zone.poi.x, zone.poi.y);
-        agent.startWorking();
+      agent.showSpeech(ev.title || ev.action_type);
+      this.emitAgentStatus(agent, ev.title || ev.action_type);
+
+      const toolTarget = agentConfigService.resolveToolTarget(agent.def.id, ev.action_type);
+      if (toolTarget) {
+        await agent.walkTo(toolTarget.x, toolTarget.y);
+      } else {
+        const zoneName = ACTION_TYPE_TO_ZONE[ev.action_type] ?? 'mainOffice';
+        const zone = ZONES[zoneName];
+        if (zone) await agent.walkTo(zone.poi.x, zone.poi.y);
       }
+
+      agent.startWorking();
     } else if (ev.status === 'completed') {
       agent.stopAction();
       const summary = ev.results_summary || ev.title || 'Completado';
