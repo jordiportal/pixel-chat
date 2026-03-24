@@ -9,10 +9,12 @@ window.__BRAIN_API_URL__ = "${BRAIN_API_URL:-}";
 window.__APP_VERSION__ = "${APP_VERSION:-0.1.0}";
 EOF
 
-# Inyectar el script de configuración en index.html si no está ya
-if ! grep -q "config.js" /usr/share/nginx/html/index.html; then
-    sed -i 's/<head>/<head>\n  <script src="\/config.js"><\/script>/' /usr/share/nginx/html/index.html
-fi
+# Inyectar el script de configuración en todas las páginas HTML
+for htmlfile in /usr/share/nginx/html/index.html /usr/share/nginx/html/editor.html; do
+    if [ -f "$htmlfile" ] && ! grep -q "config.js" "$htmlfile"; then
+        sed -i 's/<head>/<head>\n  <script src="\/config.js"><\/script>/' "$htmlfile"
+    fi
+done
 
 echo "Pixel Chat - Configuración aplicada"
 echo "BRAIN_API_URL: ${BRAIN_API_URL:-'(no configurado - usará localStorage)'}"

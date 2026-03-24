@@ -2,7 +2,7 @@
  * Procedural generation utilities for agent appearance and positioning.
  */
 
-import { ZONES, parseMapData, WALKABLE } from '../game/map/OfficeMap';
+import { getZones, parseMapData, getWalkableSet } from '../game/map/OfficeMap';
 
 // ── Deterministic hash for consistent generation ─────────────────
 
@@ -53,7 +53,7 @@ const ZONE_WALKABLE_CACHE = new Map<string, Array<{ x: number; y: number }>>();
 function getWalkableTiles(zone: string): Array<{ x: number; y: number }> {
   if (ZONE_WALKABLE_CACHE.has(zone)) return ZONE_WALKABLE_CACHE.get(zone)!;
 
-  const zoneDef = ZONES[zone];
+  const zoneDef = getZones()[zone];
   if (!zoneDef) return [];
 
   const mapData = parseMapData();
@@ -64,7 +64,7 @@ function getWalkableTiles(zone: string): Array<{ x: number; y: number }> {
     const row = mapData[y];
     if (!row) continue;
     for (let x = bx; x < bx + bw; x++) {
-      if (WALKABLE.has(row[x])) {
+      if (getWalkableSet().has(row[x])) {
         tiles.push({ x, y });
       }
     }
@@ -74,9 +74,22 @@ function getWalkableTiles(zone: string): Array<{ x: number; y: number }> {
   return tiles;
 }
 
+const MIN_AGENT_DISTANCE = 3;
+
+function minDistToOccupied(x: number, y: number, occupied: Set<string>): number {
+  let min = Infinity;
+  for (const key of occupied) {
+    const [ox, oy] = key.split(',').map(Number);
+    const d = Math.abs(x - ox) + Math.abs(y - oy);
+    if (d < min) min = d;
+  }
+  return min;
+}
+
 /**
  * Find a free walkable position inside a zone.
  * `occupied` is a set of "x,y" strings.
+ * Spreads agents across the zone keeping minimum distance.
  */
 export function findFreePosition(
   zone: string,
@@ -85,22 +98,37 @@ export function findFreePosition(
   const tiles = getWalkableTiles(zone);
   if (tiles.length === 0) return { x: 1, y: 1 };
 
-  // Prefer tiles near the zone POI
-  const poi = ZONES[zone]?.poi ?? tiles[0];
-  const sorted = [...tiles].sort((a, b) => {
+  const poi = getZones()[zone]?.poi ?? tiles[0];
+
+  const candidates = tiles.filter(t => !occupied.has(`${t.x},${t.y}`));
+  if (candidates.length === 0) {
+    return tiles[Math.floor(Math.random() * tiles.length)];
+  }
+
+  if (occupied.size === 0) {
+    candidates.sort((a, b) => {
+      const da = Math.abs(a.x - poi.x) + Math.abs(a.y - poi.y);
+      const db = Math.abs(b.x - poi.x) + Math.abs(b.y - poi.y);
+      return da - db;
+    });
+    return candidates[0];
+  }
+
+  const wellSpaced = candidates.filter(
+    t => minDistToOccupied(t.x, t.y, occupied) >= MIN_AGENT_DISTANCE,
+  );
+  const pool = wellSpaced.length > 0 ? wellSpaced : candidates;
+
+  pool.sort((a, b) => {
+    const distA = minDistToOccupied(a.x, a.y, occupied);
+    const distB = minDistToOccupied(b.x, b.y, occupied);
+    if (distA !== distB) return distB - distA;
     const da = Math.abs(a.x - poi.x) + Math.abs(a.y - poi.y);
     const db = Math.abs(b.x - poi.x) + Math.abs(b.y - poi.y);
     return da - db;
   });
 
-  for (const t of sorted) {
-    if (!occupied.has(`${t.x},${t.y}`)) {
-      return t;
-    }
-  }
-
-  // Fallback: any walkable tile even if occupied
-  return tiles[Math.floor(Math.random() * tiles.length)];
+  return pool[0];
 }
 
 // ── Name generation ──────────────────────────────────────────────

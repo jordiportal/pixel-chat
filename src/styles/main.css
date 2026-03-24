@@ -33,6 +33,8 @@ body {
 #game-container canvas {
   image-rendering: pixelated;
   image-rendering: crisp-edges;
+  position: relative;
+  z-index: 1;
 }
 
 #chat-container {
@@ -50,12 +52,78 @@ body {
   grid-column: 1;
   background: #0a0a1a;
   border-top: 2px solid #0f3460;
-  padding: 8px 12px;
+  padding: 10px 14px;
   display: flex;
   gap: 12px;
   overflow-x: auto;
-  min-height: 52px;
+  min-height: 56px;
   align-items: center;
+}
+
+/* ---- Camera HUD ---- */
+
+.camera-hud {
+  position: absolute;
+  bottom: 12px;
+  left: 12px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  z-index: 50;
+  background: rgba(10, 10, 26, 0.92);
+  border: 1px solid #0f3460;
+  border-radius: 6px;
+  padding: 5px 8px;
+  backdrop-filter: blur(4px);
+  user-select: none;
+  pointer-events: auto;
+}
+
+.camera-btn {
+  width: 28px;
+  height: 28px;
+  background: rgba(15, 52, 96, 0.6);
+  border: 1px solid #0f3460;
+  color: #8a9ab5;
+  font-family: 'Courier New', monospace;
+  font-size: 16px;
+  font-weight: bold;
+  cursor: pointer;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, color 0.15s;
+  padding: 0;
+  line-height: 1;
+}
+
+.camera-btn:hover {
+  background: #0f3460;
+  color: #e0e0e0;
+}
+
+.camera-btn-wide {
+  width: 32px;
+  font-size: 18px;
+}
+
+.camera-btn-active {
+  background: #e94560;
+  border-color: #e94560;
+  color: white;
+}
+
+.camera-btn-active:hover {
+  background: #ff6b8a;
+}
+
+.camera-zoom-label {
+  font-size: 11px;
+  color: #8a9ab5;
+  min-width: 36px;
+  text-align: center;
+  font-family: 'Courier New', monospace;
 }
 
 /* ---- Chat Panel ---- */
@@ -81,7 +149,7 @@ body {
   gap: 8px;
 }
 
-.config-btn,
+.editor-link,
 .settings-btn {
   background: none;
   border: 1px solid rgba(255,255,255,.2);
@@ -91,9 +159,12 @@ body {
   font-size: 14px;
   border-radius: 3px;
   position: relative;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
 }
 
-.config-btn:hover,
+.editor-link:hover,
 .settings-btn:hover {
   background: rgba(255,255,255,.08);
 }
@@ -334,19 +405,19 @@ body {
 .agent-status {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
+  gap: 8px;
+  padding: 8px 14px;
   background: #16213e;
   border: 1px solid #0f3460;
-  border-radius: 4px;
-  font-size: 11px;
+  border-radius: 6px;
+  font-size: 14px;
   white-space: nowrap;
   flex-shrink: 0;
 }
 
 .agent-dot {
-  width: 8px;
-  height: 8px;
+  width: 10px;
+  height: 10px;
   border-radius: 50%;
   flex-shrink: 0;
 }
@@ -363,11 +434,13 @@ body {
 .agent-name {
   font-weight: bold;
   color: #e0e0e0;
+  font-size: 14px;
 }
 
 .agent-action {
   color: #8a9ab5;
-  max-width: 140px;
+  font-size: 13px;
+  max-width: 200px;
   overflow: hidden;
   text-overflow: ellipsis;
 }
@@ -783,4 +856,366 @@ body {
 
 .acp-tool-add-btn {
   padding: 3px 10px !important;
+}
+
+/* ---- RPG Agent Card ---- */
+
+.rpg-card-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+  transition: background 0.2s;
+  pointer-events: none;
+}
+
+.rpg-card-overlay.visible {
+  background: rgba(0, 0, 0, 0.65);
+  pointer-events: all;
+}
+
+.rpg-card-overlay.visible .rpg-card {
+  transform: scale(1);
+  opacity: 1;
+}
+
+.rpg-card {
+  position: relative;
+  width: 380px;
+  max-height: 85vh;
+  overflow-y: auto;
+  background: #12122a;
+  border: 2px solid #e94560;
+  border-radius: 8px;
+  padding: 0;
+  box-shadow:
+    0 0 30px rgba(233, 69, 96, 0.3),
+    0 0 60px rgba(233, 69, 96, 0.1),
+    inset 0 0 20px rgba(0, 0, 0, 0.4);
+  transform: scale(0.9);
+  opacity: 0;
+  transition: transform 0.2s ease-out, opacity 0.2s;
+}
+
+.rpg-card::-webkit-scrollbar { width: 4px; }
+.rpg-card::-webkit-scrollbar-thumb { background: #e94560; border-radius: 2px; }
+
+.rpg-close {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  background: none;
+  border: none;
+  color: #666;
+  font-size: 16px;
+  cursor: pointer;
+  z-index: 1;
+}
+.rpg-close:hover { color: #e94560; }
+
+.rpg-set-primary {
+  background: none;
+  border: 1px solid #333;
+  border-radius: 6px;
+  color: #555;
+  font-size: 22px;
+  cursor: pointer;
+  padding: 4px 8px;
+  line-height: 1;
+  flex-shrink: 0;
+  transition: all 0.2s;
+}
+.rpg-set-primary:hover {
+  color: #f0c040;
+  border-color: #f0c040;
+  background: rgba(240, 192, 64, 0.1);
+}
+.rpg-set-primary.is-primary {
+  color: #f0c040;
+  border-color: #f0c040;
+  background: rgba(240, 192, 64, 0.15);
+  cursor: default;
+  text-shadow: 0 0 8px rgba(240, 192, 64, 0.6);
+}
+
+.rpg-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 16px 12px;
+  background: linear-gradient(135deg, #1a1a3a 0%, #12122a 100%);
+}
+
+.rpg-avatar {
+  image-rendering: pixelated;
+  width: 72px;
+  height: 72px;
+  border: 2px solid #e94560;
+  border-radius: 6px;
+  box-shadow: 0 0 10px rgba(233, 69, 96, 0.4);
+  flex-shrink: 0;
+}
+
+.rpg-title {
+  flex: 1;
+  min-width: 0;
+}
+
+.rpg-name {
+  font-size: 20px;
+  color: #ffffff;
+  font-family: 'Courier New', monospace;
+  font-weight: bold;
+  margin: 0;
+  text-shadow: 0 0 8px rgba(233, 69, 96, 0.5);
+}
+
+.rpg-class {
+  font-size: 13px;
+  color: #8a9ab5;
+  font-family: 'Courier New', monospace;
+  display: block;
+  margin-top: 3px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rpg-divider {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, #e94560, transparent);
+  margin: 0 12px;
+}
+
+.rpg-stats {
+  padding: 10px 16px;
+}
+
+.rpg-stat-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 3px 0;
+}
+
+.rpg-stat-label {
+  font-size: 13px;
+  color: #666;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-family: 'Courier New', monospace;
+}
+
+.rpg-stat-value {
+  font-size: 14px;
+  color: #e0e0e0;
+  font-family: 'Courier New', monospace;
+  text-align: right;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rpg-section {
+  padding: 10px 16px;
+}
+
+.rpg-section-title {
+  font-size: 13px;
+  color: #e94560;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  font-family: 'Courier New', monospace;
+  margin: 0 0 10px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.rpg-badge {
+  background: #e94560;
+  color: #fff;
+  font-size: 11px;
+  padding: 2px 7px;
+  border-radius: 8px;
+  font-weight: bold;
+}
+
+.rpg-attributes {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.rpg-attr {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.rpg-attr-label {
+  font-size: 13px;
+  color: #666;
+  font-family: 'Courier New', monospace;
+}
+
+.rpg-attr-value {
+  font-size: 13px;
+  color: #aabbcc;
+  font-family: 'Courier New', monospace;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rpg-colors {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  color: #888;
+  font-family: 'Courier New', monospace;
+}
+
+.rpg-color-swatch {
+  width: 22px;
+  height: 22px;
+  border-radius: 3px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  box-shadow: 0 0 6px rgba(0, 0, 0, 0.4);
+}
+
+.rpg-tools {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.rpg-tool {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  background: #0a0a1a;
+  border: 1px solid #1a1a3a;
+  border-radius: 4px;
+}
+
+.rpg-tool-icon {
+  image-rendering: pixelated;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  border-radius: 3px;
+  border: 1px solid #222;
+}
+
+.rpg-tool-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.rpg-tool-name {
+  font-size: 13px;
+  color: #e0e0e0;
+  font-family: 'Courier New', monospace;
+  font-weight: bold;
+}
+
+.rpg-tool-label {
+  font-size: 11px;
+  color: #666;
+  font-family: 'Courier New', monospace;
+}
+
+.rpg-tool-pos {
+  font-size: 11px;
+  color: #4488cc;
+  font-family: 'Courier New', monospace;
+}
+
+.rpg-empty {
+  font-size: 13px;
+  color: #444;
+  font-style: italic;
+  font-family: 'Courier New', monospace;
+}
+
+/* ---- A2A Skill Info ---- */
+
+.rpg-description {
+  font-size: 13px;
+  color: #b0b8cc;
+  font-family: 'Courier New', monospace;
+  line-height: 1.5;
+  margin-bottom: 4px;
+}
+
+.rpg-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.rpg-tag {
+  font-size: 11px;
+  color: #c0c8e0;
+  background: #1a1a3a;
+  border: 1px solid #2a2a5a;
+  border-radius: 4px;
+  padding: 3px 8px;
+  font-family: 'Courier New', monospace;
+}
+
+.rpg-examples {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.rpg-example {
+  font-size: 12px;
+  color: #8a9ab5;
+  font-family: 'Courier New', monospace;
+  padding: 4px 8px;
+  background: #0a0a1a;
+  border-left: 2px solid #4488cc;
+  border-radius: 0 4px 4px 0;
+}
+
+.rpg-modes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.rpg-mode {
+  font-size: 11px;
+  color: #aabbcc;
+  background: #0f1a2e;
+  border: 1px solid #1a2a4a;
+  border-radius: 4px;
+  padding: 3px 8px;
+  font-family: 'Courier New', monospace;
+}
+
+.rpg-mode-in { border-color: #2a6a3a; color: #6abb7a; }
+.rpg-mode-out { border-color: #6a3a2a; color: #bb7a6a; }
+
+.agent-status {
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.agent-status:hover {
+  background: #1a2a4a;
+  border-color: #e94560;
 }

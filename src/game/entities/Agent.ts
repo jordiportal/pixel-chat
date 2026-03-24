@@ -1,8 +1,9 @@
 import Phaser from 'phaser';
 import type { AgentDef } from '../map/OfficeMap';
-import { TILE_SIZE, WALKABLE } from '../map/OfficeMap';
+import { TILE_SIZE, getWalkableSet } from '../map/OfficeMap';
 import { findPath, getDirection, type GridPos } from '../pathfinding';
 import { Bubble } from '../ui/Bubble';
+import { getToolIcon } from '../constants/ToolVisuals';
 
 export type AgentState = 'idle' | 'walking' | 'working' | 'thinking';
 
@@ -14,12 +15,17 @@ export class Agent {
   tileY: number;
   state: AgentState = 'idle';
   active = false;
+  currentActionType = '';
 
   private scene: Phaser.Scene;
   private bubble: Bubble | null = null;
   private walkPromise: Promise<void> | null = null;
   private walkCancel = false;
   private collisionGrid: number[][] = [];
+  private progressBar: Phaser.GameObjects.Graphics | null = null;
+  private progressBg: Phaser.GameObjects.Graphics | null = null;
+  private progressValue = 0;
+  private progressMax = 0;
 
   constructor(scene: Phaser.Scene, def: AgentDef, collisionGrid: number[][]) {
     this.scene = scene;
@@ -35,8 +41,8 @@ export class Agent {
     this.sprite.setOrigin(0.5, 0.5);
     this.sprite.setDepth(10);
 
-    this.nameTag = scene.add.text(px, py - 12, def.name, {
-      fontSize: '7px',
+    this.nameTag = scene.add.text(px, py - TILE_SIZE * 0.75, def.name, {
+      fontSize: `${Math.round(TILE_SIZE * 0.44)}px`,
       fontFamily: 'monospace',
       color: '#ffffff',
       backgroundColor: '#000000aa',
@@ -45,7 +51,7 @@ export class Agent {
     this.nameTag.setOrigin(0.5, 1);
     this.nameTag.setDepth(11);
 
-    this.setActive(def.id === 'brain');
+    this.setActive(false);
   }
 
   setActive(val: boolean): void {
@@ -60,7 +66,7 @@ export class Agent {
       this.tileX, this.tileY, tx, ty,
       (x, y) => {
         const row = this.collisionGrid[y];
-        return row !== undefined && WALKABLE.has(row[x]);
+        return row !== undefined && getWalkableSet().has(row[x]);
       },
     );
     if (path.length < 2) return;
@@ -91,34 +97,129 @@ export class Agent {
     this.clearBubble();
     this.state = 'thinking';
     const display = text
-      ? (text.length > 30 ? text.slice(0, 28) + '..' : text)
+      ? (text.length > 80 ? text.slice(0, 77) + '...' : text)
       : '...';
-    this.bubble = new Bubble(this.scene, this.sprite.x, this.sprite.y - 18, display, 'thought');
+    this.bubble = new Bubble(this.scene, this.sprite.x, this.sprite.y - TILE_SIZE * 1.25, display, 'thought');
   }
 
   showSpeech(text: string): void {
     this.clearBubble();
-    const display = text.length > 40 ? text.slice(0, 38) + '..' : text;
-    this.bubble = new Bubble(this.scene, this.sprite.x, this.sprite.y - 18, display, 'speech');
+    const display = text.length > 100 ? text.slice(0, 97) + '...' : text;
+    this.bubble = new Bubble(this.scene, this.sprite.x, this.sprite.y - TILE_SIZE * 1.25, display, 'speech');
   }
 
-  startWorking(): void {
+  startWorking(actionType?: string): void {
     this.state = 'working';
+    this.currentActionType = actionType ?? '';
     this.clearBubble();
-    this.bubble = new Bubble(this.scene, this.sprite.x, this.sprite.y - 18, '⚡', 'speech', 0);
+    const icon = getToolIcon(actionType ?? '');
+    this.bubble = new Bubble(this.scene, this.sprite.x, this.sprite.y - TILE_SIZE * 1.25, icon, 'speech', 0);
   }
 
   stopAction(): void {
     this.walkCancel = true;
     this.clearBubble();
+    this.hideProgress();
+    this.currentActionType = '';
     this.state = 'idle';
     this.playIdle();
   }
 
+  /* ─── Progress bar ─── */
+
+  showProgress(current: number, max: number): void {
+    this.progressValue = current;
+    this.progressMax = max;
+    this.drawProgress();
+  }
+
+  hideProgress(): void {
+    this.progressValue = 0;
+    this.progressMax = 0;
+    this.progressBar?.destroy();
+    this.progressBg?.destroy();
+    this.progressBar = null;
+    this.progressBg = null;
+  }
+
+  private drawProgress(): void {
+    if (this.progressMax <= 0) return;
+    const barW = TILE_SIZE * 0.9;
+    const barH = 3;
+    const yOff = this.sprite.y - TILE_SIZE * 0.55;
+    const xOff = this.sprite.x - barW / 2;
+
+    if (!this.progressBg) {
+      this.progressBg = this.scene.add.graphics();
+      this.progressBg.setDepth(12);
+    }
+    if (!this.progressBar) {
+      this.progressBar = this.scene.add.graphics();
+      this.progressBar.setDepth(13);
+    }
+
+    this.progressBg.clear();
+    this.progressBg.fillStyle(0x000000, 0.5);
+    this.progressBg.fillRoundedRect(xOff, yOff, barW, barH, 1);
+
+    const pct = Math.min(this.progressValue / this.progressMax, 1);
+    const r = Math.round(255 * (1 - pct));
+    const g = Math.round(200 * pct + 55);
+    const color = (r << 16) | (g << 8) | 0x20;
+
+    this.progressBar.clear();
+    this.progressBar.fillStyle(color, 0.9);
+    this.progressBar.fillRoundedRect(xOff, yOff, barW * pct, barH, 1);
+  }
+
+  /* ─── Emotions ─── */
+
+  celebrate(): void {
+    this.scene.tweens.add({
+      targets: this.sprite,
+      y: this.sprite.y - TILE_SIZE * 0.4,
+      duration: 150,
+      yoyo: true,
+      ease: 'Quad.easeOut',
+      onComplete: () => {
+        this.scene.tweens.add({
+          targets: this.sprite,
+          y: this.sprite.y - TILE_SIZE * 0.2,
+          duration: 120,
+          yoyo: true,
+          ease: 'Quad.easeOut',
+        });
+      },
+    });
+  }
+
+  shakeError(): void {
+    const origX = this.sprite.x;
+    this.scene.tweens.add({
+      targets: this.sprite,
+      x: origX + 3,
+      duration: 40,
+      yoyo: true,
+      repeat: 5,
+      ease: 'Sine.easeInOut',
+      onComplete: () => { this.sprite.x = origX; },
+    });
+    this.clearBubble();
+    this.bubble = new Bubble(this.scene, this.sprite.x, this.sprite.y - TILE_SIZE * 1.25, '❌', 'speech', 2500);
+  }
+
+  wave(): void {
+    this.clearBubble();
+    this.bubble = new Bubble(this.scene, this.sprite.x, this.sprite.y - TILE_SIZE * 1.25, '👋', 'speech', 2000);
+  }
+
   update(): void {
-    this.nameTag.setPosition(this.sprite.x, this.sprite.y - 12);
+    this.nameTag.setPosition(this.sprite.x, this.sprite.y - TILE_SIZE * 0.75);
     if (this.bubble && !this.bubble.destroyed) {
-      this.bubble.setPosition(this.sprite.x, this.sprite.y - 18);
+      this.bubble.setPosition(this.sprite.x, this.sprite.y - TILE_SIZE * 1.25);
+    }
+    if (this.progressBar || this.progressBg) {
+      this.drawProgress();
     }
   }
 
@@ -155,6 +256,7 @@ export class Agent {
 
   destroy(): void {
     this.clearBubble();
+    this.hideProgress();
     this.nameTag.destroy();
     this.sprite.destroy();
   }

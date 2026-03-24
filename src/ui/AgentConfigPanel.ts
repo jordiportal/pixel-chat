@@ -5,7 +5,7 @@
 import { agentConfigService, type UnconfiguredSkill } from '../services/AgentConfigService';
 import { generateColors, findFreePosition } from '../utils/AgentGenerator';
 import { db, type AgentRow, type ToolMappingRow } from '../db/Database';
-import { ZONES } from '../game/map/OfficeMap';
+import { getZones } from '../game/map/OfficeMap';
 
 export class AgentConfigPanel {
   private overlay: HTMLElement | null = null;
@@ -69,7 +69,7 @@ export class AgentConfigPanel {
   // ── HTML builders ─────────────────────────────────────────────
 
   private zoneOptions(selected: string): string {
-    return Object.entries(ZONES)
+    return Object.entries(getZones())
       .map(([k, v]) => `<option value="${k}"${k === selected ? ' selected' : ''}>${v.label}</option>`)
       .join('');
   }
@@ -220,7 +220,7 @@ export class AgentConfigPanel {
             </div>
             <div class="acp-agent-info">
               <strong>${this.esc(a.name)}</strong>
-              <span class="acp-agent-meta">${this.esc(a.skill_id)} | ${ZONES[a.zone]?.label ?? a.zone} (${a.home_x}, ${a.home_y})${toolMappings.length > 0 ? ` | ${toolMappings.length} tools` : ''}</span>
+              <span class="acp-agent-meta">${this.esc(a.skill_id)} | ${getZones()[a.zone]?.label ?? a.zone} (${a.home_x}, ${a.home_y})${toolMappings.length > 0 ? ` | ${toolMappings.length} tools` : ''}</span>
             </div>
             <button class="acp-btn acp-btn-edit" data-index="${i}" title="Editar">✎</button>
             <button class="acp-btn acp-btn-danger acp-btn-delete" data-id="${this.esc(a.id)}" title="Eliminar">✕</button>

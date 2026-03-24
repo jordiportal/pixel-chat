@@ -4,15 +4,10 @@ import { BrainClient } from './brain/client';
 import { eventBus } from './events/EventBus';
 import { agentRegistry } from './game/map/AgentRegistry';
 import { agentConfigService } from './services/AgentConfigService';
-import { agentConfigPanel } from './ui/AgentConfigPanel';
 import { db } from './db/Database';
+import { tileRegistry } from './services/TileRegistry';
+import { agentCard } from './ui/AgentCard';
 import type { AgentDef } from './game/map/OfficeMap';
-
-/* ─── Bootstrap ─── */
-
-const game = createGame('game-container');
-const chat = new ChatPanel('chat-container');
-const brain = new BrainClient();
 
 /* ─── Status Bar (Dynamic) ─── */
 
@@ -43,15 +38,14 @@ function renderAgentStatuses(agents: AgentDef[]): void {
   if (agents.length === 0) {
     const empty = document.createElement('div');
     empty.className = 'agent-status agent-status-empty';
-    empty.innerHTML = '<span class="agent-action">Sin agentes — configura desde el chat</span>';
+    empty.innerHTML = '<span class="agent-action">Sin agentes — abre el <a href="editor.html" style="color:#4488cc">Editor</a></span>';
     statusBar.appendChild(empty);
   }
 }
 
-renderAgentStatuses(agentRegistry.getAgents());
-
 eventBus.on('agents:loaded', (payload: { agents: AgentDef[]; source: string }) => {
   console.log(`[Main] Reloading status bar with ${payload.agents.length} agents from ${payload.source}`);
+  currentAgentDefs = payload.agents;
   renderAgentStatuses(payload.agents);
 });
 
@@ -66,20 +60,94 @@ eventBus.on('agent:status', (payload: {
   actionEl.textContent = payload.action;
 });
 
-/* ─── Hybrid init: DB → A2A → load or prompt ─── */
+/* ─── Agent Card ─── */
 
-async function initAgents(): Promise<void> {
+let currentAgentDefs: AgentDef[] = [];
+
+eventBus.on('agent:card-open', (data: { def: AgentDef; state: string; action: string; tileX: number; tileY: number }) => {
+  agentCard.show(data as any);
+});
+
+statusBar.addEventListener('click', (e) => {
+  const el = (e.target as HTMLElement).closest('.agent-status');
+  if (!el || el.classList.contains('agent-status-empty')) return;
+  const agentId = el.getAttribute('data-agent-id');
+  if (!agentId) return;
+  const def = currentAgentDefs.find(a => a.id === agentId);
+  if (!def) return;
+  agentCard.show({ def, state: 'idle' as any, action: 'Idle', tileX: def.homeX, tileY: def.homeY });
+});
+
+/* ─── Camera HUD ─── */
+
+function createCameraHUD(): void {
+  const container = document.getElementById('game-container')!;
+
+  const hud = document.createElement('div');
+  hud.className = 'camera-hud';
+
+  const zoomLabel = document.createElement('span');
+  zoomLabel.className = 'camera-zoom-label';
+  zoomLabel.textContent = '100%';
+
+  const btnZoomIn = document.createElement('button');
+  btnZoomIn.className = 'camera-btn';
+  btnZoomIn.textContent = '+';
+  btnZoomIn.title = 'Zoom in';
+  btnZoomIn.addEventListener('click', () => eventBus.emit('camera:zoom-in'));
+
+  const btnZoomOut = document.createElement('button');
+  btnZoomOut.className = 'camera-btn';
+  btnZoomOut.textContent = '−';
+  btnZoomOut.title = 'Zoom out';
+  btnZoomOut.addEventListener('click', () => eventBus.emit('camera:zoom-out'));
+
+  const btnFitAll = document.createElement('button');
+  btnFitAll.className = 'camera-btn camera-btn-wide';
+  btnFitAll.textContent = '⊞';
+  btnFitAll.title = 'Ver todo el mapa';
+  btnFitAll.addEventListener('click', () => eventBus.emit('camera:fit-all'));
+
+  const btnFollow = document.createElement('button');
+  btnFollow.className = 'camera-btn camera-btn-wide camera-btn-active';
+  btnFollow.textContent = '◎';
+  btnFollow.title = 'Seguir agente';
+  btnFollow.addEventListener('click', () => eventBus.emit('camera:follow-agent'));
+
+  hud.append(btnZoomOut, zoomLabel, btnZoomIn, btnFitAll, btnFollow);
+  container.appendChild(hud);
+
+  eventBus.on('camera:zoom-changed', (zoom: number) => {
+    zoomLabel.textContent = `${Math.round(zoom * 100)}%`;
+  });
+
+  eventBus.on('camera:follow-changed', (following: boolean) => {
+    btnFollow.classList.toggle('camera-btn-active', following);
+  });
+}
+
+/* ─── Bootstrap: DB first, then Phaser ─── */
+
+async function boot(): Promise<void> {
   await db.init();
-  console.log('[Main] Database initialized');
+  await tileRegistry.load();
+  console.log('[Main] Database + TileRegistry initialized');
 
-  // If we already have configured agents, load them immediately
+  const game = createGame('game-container');
+  createCameraHUD();
+  const chat = new ChatPanel('chat-container');
+  const brain = new BrainClient();
+
+  currentAgentDefs = agentRegistry.getAgents();
+  renderAgentStatuses(currentAgentDefs);
+
   if (agentConfigService.hasAgents()) {
+    await agentConfigService.redistributeAgents();
     const agents = agentConfigService.getAgentDefs();
     console.log(`[Main] Loaded ${agents.length} configured agents from DB`);
     eventBus.emit('agents:loaded', { agents, source: 'db' });
   }
 
-  // Discover A2A skills in background
   try {
     const skills = await agentConfigService.fetchSkills();
     console.log(`[Main] Discovered ${skills.length} A2A skills`);
@@ -92,15 +160,10 @@ async function initAgents(): Promise<void> {
   } catch (err) {
     console.warn('[Main] A2A discovery failed:', err);
   }
+
+  void game;
+  void chat;
+  void brain;
 }
 
-initAgents().catch(err => console.error('[Main] Agent init failed:', err));
-
-// Global access for config panel
-eventBus.on('open:agent-config', () => {
-  agentConfigPanel.show();
-});
-
-void game;
-void chat;
-void brain;
+boot().catch(err => console.error('[Main] Boot failed:', err));

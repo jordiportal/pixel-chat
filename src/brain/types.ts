@@ -45,9 +45,26 @@ export interface BrainStatusEvent {
   title?: string;
 }
 
+export interface BrainTaskPlanEvent {
+  type: 'task_plan';
+  plan_id: string;
+  goal: string;
+  steps: Array<{ title: string; status?: string }>;
+}
+
+export interface BrainTaskPlanUpdateEvent {
+  type: 'task_plan_update';
+  plan_id: string;
+  step_index: number;
+  status: string;
+  result_summary?: string;
+}
+
 export type BrainEvent =
   | BrainThinkingEvent
   | BrainActionEvent
   | BrainSourcesEvent
   | BrainArtifactEvent
-  | BrainStatusEvent;
+  | BrainStatusEvent
+  | BrainTaskPlanEvent
+  | BrainTaskPlanUpdateEvent;

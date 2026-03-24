@@ -8,7 +8,8 @@ import { db, type AgentRow, type ToolMappingRow } from '../db/Database';
 import { a2aClient, type A2ASkill } from '../a2a/client';
 import { generateColors, findFreePosition, generateBrainNames, generateDisplayName } from '../utils/AgentGenerator';
 import { eventBus } from '../events/EventBus';
-import { ACTION_TYPE_TO_ZONE, parseMapData, WALKABLE, TILE, ZONES, type ZoneDef, type AgentDef } from '../game/map/OfficeMap';
+import { ACTION_TYPE_TO_ZONE, parseMapData, getWalkableSet, getZones, type ZoneDef, type AgentDef } from '../game/map/OfficeMap';
+import { tileRegistry } from './TileRegistry';
 
 export interface UnconfiguredSkill {
   skill: A2ASkill;
@@ -27,17 +28,18 @@ export interface UnconfiguredSkill {
 const TAG_TO_ZONE: Record<string, string> = {
   code: 'serverRoom', shell: 'serverRoom', developer: 'serverRoom',
   python: 'serverRoom', javascript: 'serverRoom',
-  researcher: 'webCorner', web: 'webCorner', search: 'webCorner',
-  image: 'library', media: 'library', 'image-generation': 'library',
-  designer: 'library', slides: 'library', blender: 'library', '3d': 'library',
-  rag: 'library', librarian: 'library',
+  researcher: 'researchLab', web: 'researchLab', search: 'researchLab',
+  rag: 'researchLab', librarian: 'researchLab', document: 'researchLab', knowledge: 'researchLab',
+  image: 'creativeStudio', media: 'creativeStudio', 'image-generation': 'creativeStudio',
+  designer: 'creativeStudio', slides: 'creativeStudio', blender: 'creativeStudio',
+  '3d': 'creativeStudio', comfyui: 'creativeStudio', comfy: 'creativeStudio',
   data: 'mainOffice', analysis: 'mainOffice', sap: 'mainOffice',
   orchestration: 'mainOffice', general: 'mainOffice', assistant: 'mainOffice',
   m365: 'mainOffice', email: 'mainOffice', calendar: 'mainOffice',
-  communication: 'meetingRoom', storytelling: 'meetingRoom',
+  communication: 'meetingRoomA', storytelling: 'meetingRoomA',
 };
 
-const ZONE_LIST = ['mainOffice', 'library', 'serverRoom', 'webCorner', 'meetingRoom'];
+const ZONE_LIST = ['mainOffice', 'creativeStudio', 'serverRoom', 'researchLab', 'meetingRoomA', 'meetingRoomB'];
 
 class AgentConfigService {
   private cachedSkills: A2ASkill[] | null = null;
@@ -163,6 +165,43 @@ class AgentConfigService {
     return unconfigured.length;
   }
 
+  private static readonly ZONE_MIGRATION: Record<string, string> = {
+    library: 'creativeStudio',
+    webCorner: 'researchLab',
+    meetingRoom: 'meetingRoomA',
+  };
+
+  private migrateZone(zone: string): string {
+    const validZones = new Set(Object.keys(getZones()));
+    if (validZones.has(zone)) return zone;
+    const migrated = AgentConfigService.ZONE_MIGRATION[zone];
+    if (migrated && validZones.has(migrated)) return migrated;
+    return ZONE_LIST[0];
+  }
+
+  /** Redistribute all agents across their zones using the spacing algorithm */
+  async redistributeAgents(): Promise<number> {
+    const agents = db.getAllAgents();
+    if (agents.length === 0) return 0;
+
+    const occupied = new Set<string>();
+    for (const agent of agents) {
+      agent.zone = this.migrateZone(agent.zone);
+      const pos = findFreePosition(agent.zone, occupied);
+      agent.home_x = pos.x;
+      agent.home_y = pos.y;
+      occupied.add(`${pos.x},${pos.y}`);
+    }
+
+    for (const agent of agents) {
+      await db.upsertAgent(agent);
+    }
+
+    this.emitChange();
+    console.log(`[AgentConfig] Redistributed ${agents.length} agents`);
+    return agents.length;
+  }
+
   /** Delete an agent */
   async deleteAgent(id: string): Promise<void> {
     await db.deleteAgent(id);
@@ -274,20 +313,7 @@ class AgentConfigService {
 
   /** Scan the map and return all interactable element instances with position + zone */
   getMapElements(): Array<{ type: string; label: string; x: number; y: number; zone: string; zoneLabel: string }> {
-    const TILE_TYPE_INFO: Record<string, string> = {
-      MONITOR: 'Monitor', SERVER: 'Servidor', BOOKSHELF: 'Estantería',
-      WHITEBOARD: 'Pizarra', COFFEE: 'Cafetera', DESK: 'Escritorio', TABLE: 'Mesa',
-    };
-    const interactable: Set<number> = new Set([
-      TILE.DESK, TILE.MONITOR, TILE.BOOKSHELF, TILE.SERVER,
-      TILE.WHITEBOARD, TILE.COFFEE, TILE.TABLE,
-    ]);
-    const indexToType: Record<number, string> = {
-      [TILE.DESK]: 'DESK', [TILE.MONITOR]: 'MONITOR', [TILE.BOOKSHELF]: 'BOOKSHELF',
-      [TILE.SERVER]: 'SERVER', [TILE.WHITEBOARD]: 'WHITEBOARD',
-      [TILE.COFFEE]: 'COFFEE', [TILE.TABLE]: 'TABLE',
-    };
-
+    const interactable = tileRegistry.interactableSet;
     const mapData = parseMapData();
     const elements: Array<{ type: string; label: string; x: number; y: number; zone: string; zoneLabel: string }> = [];
 
@@ -296,13 +322,13 @@ class AgentConfigService {
         const tile = mapData[y][x];
         if (!interactable.has(tile)) continue;
 
-        const type = indexToType[tile];
-        if (!type) continue;
+        const def = tileRegistry.getDef(tile);
+        if (!def) continue;
 
         const zone = this.getZoneAt(x, y);
         elements.push({
-          type,
-          label: TILE_TYPE_INFO[type] ?? type,
+          type: def.name.toUpperCase().replace(/\s+/g, '_'),
+          label: def.name,
           x, y,
           zone: zone?.name ?? '?',
           zoneLabel: zone?.label ?? 'Exterior',
@@ -314,7 +340,7 @@ class AgentConfigService {
   }
 
   private getZoneAt(x: number, y: number): ZoneDef | null {
-    for (const z of Object.values(ZONES)) {
+    for (const z of Object.values(getZones())) {
       const b = z.bounds;
       if (x >= b.x && x < b.x + b.w && y >= b.y && y < b.y + b.h) return z;
     }
@@ -366,27 +392,26 @@ class AgentConfigService {
       [1, 1], [1, -1], [-1, 1], [-1, -1],
     ];
 
-    // Check the tile itself first
-    if (mapData[ty]?.[tx] !== undefined && WALKABLE.has(mapData[ty][tx])) {
+    const walkable = getWalkableSet();
+
+    if (mapData[ty]?.[tx] !== undefined && walkable.has(mapData[ty][tx])) {
       return { x: tx, y: ty };
     }
 
-    // Check adjacent tiles
     for (const [dx, dy] of offsets) {
       const nx = tx + dx;
       const ny = ty + dy;
-      if (mapData[ny]?.[nx] !== undefined && WALKABLE.has(mapData[ny][nx])) {
+      if (mapData[ny]?.[nx] !== undefined && walkable.has(mapData[ny][nx])) {
         return { x: nx, y: ny };
       }
     }
 
-    // Expand search radius
     for (let r = 2; r <= 3; r++) {
       for (let dy = -r; dy <= r; dy++) {
         for (let dx = -r; dx <= r; dx++) {
           const nx = tx + dx;
           const ny = ty + dy;
-          if (mapData[ny]?.[nx] !== undefined && WALKABLE.has(mapData[ny][nx])) {
+          if (mapData[ny]?.[nx] !== undefined && walkable.has(mapData[ny][nx])) {
             return { x: nx, y: ny };
           }
         }

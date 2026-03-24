@@ -1,6 +1,5 @@
 import { eventBus } from '../events/EventBus';
 import { getConfig, saveConfig } from '../config';
-import { agentConfigService } from '../services/AgentConfigService';
 import { marked } from 'marked';
 
 marked.setOptions({ breaks: true, gfm: true });
@@ -27,10 +26,10 @@ export class ChatPanel {
       <div class="chat-header">
         <h2>Pixel Chat</h2>
         <div class="header-actions">
-          <button class="config-btn" title="Configurar agentes">
-            <span class="config-icon">👥</span>
+          <a href="editor.html" class="editor-link" title="Editor de mapa y agentes">
+            <span class="config-icon">🗺️</span>
             <span class="pending-badge hidden">0</span>
-          </button>
+          </a>
           <button class="settings-btn" title="Configuración">⚙</button>
         </div>
       </div>
@@ -56,8 +55,6 @@ export class ChatPanel {
     });
     this.container.querySelector('.settings-btn')!
       .addEventListener('click', () => this.showSettings());
-    this.container.querySelector('.config-btn')!
-      .addEventListener('click', () => eventBus.emit('open:agent-config'));
   }
 
   private listen(): void {
@@ -96,7 +93,7 @@ export class ChatPanel {
       this.pendingBadge.textContent = String(payload.count);
       this.pendingBadge.classList.toggle('hidden', payload.count === 0);
       if (payload.count > 0) {
-        this.addMessage('system', `Hay ${payload.count} agentes A2A pendientes de configurar. Haz clic en 👥 para configurarlos.`);
+        this.addMessage('system', `Hay ${payload.count} agentes A2A pendientes de configurar. Abre el <a href="editor.html">Editor</a> para configurarlos.`);
       }
     });
   }

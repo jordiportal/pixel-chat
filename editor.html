@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Pixel Chat — Editor de Mapa</title>
+  <link rel="stylesheet" href="/src/styles/editor.css" />
+</head>
+<body>
+  <div id="editor-app">
+    <aside id="editor-sidebar">
+      <div class="sidebar-header">
+        <h2>Editor de Mapa</h2>
+        <a href="index.html" class="back-link">← Volver al chat</a>
+      </div>
+      <div id="save-section">
+        <button id="btn-save" class="save-btn">💾 Guardar mapa</button>
+        <span id="save-status" class="save-status">Sin cambios</span>
+      </div>
+      <div id="tile-palette"></div>
+      <div id="tile-manager"></div>
+      <div id="tools-bar"></div>
+      <div id="zone-editor"></div>
+      <div id="agent-config-section"></div>
+      <div id="editor-actions"></div>
+    </aside>
+    <main id="editor-canvas"></main>
+    <div id="editor-status-bar">
+      <span id="status-coords">-</span>
+      <span id="status-tile">-</span>
+      <span id="status-zone">-</span>
+    </div>
+  </div>
+  <script type="module" src="/src/editor.ts"></script>
+</body>
+</html>

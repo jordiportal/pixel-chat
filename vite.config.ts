@@ -1,13 +1,20 @@
 import { defineConfig } from 'vite';
+import { resolve } from 'path';
 
 export default defineConfig({
   base: './',
   build: {
     target: 'esnext',
     outDir: 'dist',
+    rollupOptions: {
+      input: {
+        main: resolve(__dirname, 'index.html'),
+        editor: resolve(__dirname, 'editor.html'),
+      },
+    },
   },
   optimizeDeps: {
-    exclude: ['sql.js'],
+    include: ['sql.js'],
   },
   server: {
     port: 5173,
